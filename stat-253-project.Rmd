@@ -1,10 +1,16 @@
 ---
-title: "stat-253-project"
+title: "STAT253 Project: Used Car Dataset"
 author: "John Garner & Ronan Wallace"
 output:
     html_document: 
     df_print: paged
 ---
+
+**Research Question:**
+
+Our tentative research question will be to look into the differences in the used cars being sold in our two home states, MN and WA. More generally, we will expand this analysis to include our respective US Census Divisions: West North Central and Pacific. This analysis and research will look into the prediction of car prices set in differing divisions when other chosen variables are the same.
+
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
@@ -20,6 +26,7 @@ library(naniar) #for exploring missing values
 library(pdp) #for partial dependence plots, MARS models
 library(rpart.plot) #for plotting decision trees
 library(vip) #for importance plots
+library(dplyr)
 
 #making things look nice
 library(lubridate) #for nice dates
@@ -46,8 +53,97 @@ library(randomForest) #for bagging and random forests
 theme_set(theme_minimal())
 ```
 
-```{r message=FALSE}
+```{r, eval=FALSE, echo=FALSE}
+set.seed(313)
+
+# Read in Craigslist Used Cars dataset
 rawcars <- read.csv("vehicles.csv")
 
-set.seed(313)
+# Filtering based on state
+filtered_cars <- filter(rawcars, state == "wa" | state == "ca" |  state == "or" |  state == "mn" |  state == "ia" |  state == "mo" |  state == "nd" |  state == "sd" |  state == "ne" |  state == "ks")
+
+# Creates new CSV file
+write.csv(filtered_cars, "filtered_cars.csv")
 ```
+
+```{r, echo=FALSE}
+# Reads filtered_cars.csv
+filtered_cars <- read.csv("filtered_cars.csv")
+
+# Sample
+cars_clean_sample <- sample_n(filtered_cars, 44512)
+```
+
+
+```{r}
+barplot(table(cars_clean_sample$state))
+```
+
+This graph gives us a visual representaion of the distribution of cars across each of the chosen states. As we can see here, a bit over half of the dataset comes from California, Oregon, and Washington.
+
+
+```{r, fig.width=8, fig.height=7}
+cars_clean_sample %>% 
+  select(-url) %>% 
+  select_if(is.numeric) %>% 
+  pivot_longer(cols = everything(),
+               names_to = "variable", values_to = "value") %>% 
+  ggplot(aes(x = value)) +
+  geom_histogram() +
+  facet_wrap(vars(variable), scales = "free")
+```
+
+These graphs show us there is a good bit of cleaning to be done on the data. We can see that for instance we want to use the select() function to only include useful variables, leaving out for example id. Additionally, it looks that year has an outlier(s) where the year is either 0 or blank, skewing the graph wildly.
+
+
+```{r, fig.width=8, fig.height=14}
+
+g0 <- cars_clean_sample %>% 
+  ggplot(aes(x = condition)) +
+  geom_bar() +
+  coord_flip()
+
+g1 <- cars_clean_sample %>% 
+  ggplot(aes(x = cylinders)) +
+  geom_bar() +
+  coord_flip()
+
+g2 <- cars_clean_sample %>% 
+  ggplot(aes(x = fuel)) +
+  geom_bar() +
+  coord_flip()
+
+g3 <- cars_clean_sample %>% 
+  ggplot(aes(x = title_status)) +
+  geom_bar() +
+  coord_flip()
+
+g4 <- cars_clean_sample %>% 
+  ggplot(aes(x = drive)) +
+  geom_bar() +
+  coord_flip()
+
+g5 <- cars_clean_sample %>% 
+  ggplot(aes(x = size)) +
+  geom_bar() +
+  coord_flip()
+
+g6 <- cars_clean_sample %>% 
+  ggplot(aes(x = type)) +
+  geom_bar() +
+  coord_flip()
+
+g7 <- cars_clean_sample %>% 
+  ggplot(aes(x = paint_color)) +
+  geom_bar() +
+  coord_flip()
+
+g8 <- cars_clean_sample %>% 
+  ggplot(aes(x = transmission)) +
+  geom_bar() +
+  coord_flip()
+
+grid.arrange(g0, g1, g2, g3, g4, g5, g6, g7, g8, nrow = 5)
+```
+
+From these graphs we can discern once again that some additional cleaning needs to be done. Furthermore, we can see that for many variables, the most prevalent variable is null. This can be seen with cylinders and condition, but not fuel for instance. We can also see that there are many different models in our dataset.
