@@ -6,6 +6,8 @@ output:
     df_print: paged
 ---
 
+<!-- test -->
+
 **Research Question:**
 
 Our tentative research question will be to look into the differences in the used cars being sold in our two home states, MN and WA. More generally, we will expand this analysis to include our respective US Census Divisions: West North Central and Pacific. This analysis and research will look into the prediction of car prices set in differing divisions when other chosen variables are the same.
