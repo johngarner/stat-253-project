@@ -1,18 +1,12 @@
 ---
-title: "STAT253 Project: Used Car Dataset"
-author: "John Garner & Ronan Wallace"
+title: "Used Cars: Are similar data sets that similar when it comes to modeling?"
+author: "John Garner, Ronan Wallace, & Amy Plambeck"
 output:
     html_document: 
     df_print: paged
 ---
 
-**Research Question:**
-
-Our tentative research question will be to look into the differences in the used cars being sold in our two home states, MN and WA. More generally, we will expand this analysis to include our respective US Census Divisions: West North Central and Pacific. This analysis and research will look into the prediction of car prices set in differing divisions when other chosen variables are the same.
-
-
-
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, echo=FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```
 
@@ -53,38 +47,31 @@ library(randomForest) #for bagging and random forests
 theme_set(theme_minimal())
 ```
 
-```{r, eval=FALSE, echo=FALSE}
-set.seed(313)
+```{r, echo=FALSE}
+craigslist_cars <- read_csv("https://www.dropbox.com/s/mw19jd7jxthrfsv/vehicles_close_to_mn.csv?dl=1")
+```
 
-# Read in Craigslist Used Cars dataset
-rawcars <- read.csv("vehicles.csv")
+**The Question**
+Our group wanted to look into the differences in the used cars being sold in two states: MN and WI. This analysis and research will look into the prediction of car prices set in differing states when other chosen variables are the same.
 
-# Filtering based on state
-filtered_cars <- filter(rawcars, state == "wa" | state == "ca" |  state == "or" |  state == "mn" |  state == "ia" |  state == "mo" |  state == "nd" |  state == "sd" |  state == "ne" |  state == "ks")
+**The Data**
+This data originally came from [Kaggle](https://www.kaggle.com/austinreese/craigslist-carstrucks-data/data#vehicles.csv). The data contains information on used cars scraped from various craigslist websites across the US. It was downloaded on January 17th, 2017. Minor data cleaning was performed and a subset of cars from several craigslist sites in MN and WI: minneapolis / st paul, milwaukee, eau claire, la crosse, and madison was taken. The data cleaning included the removal of unneeded variables such as the urls of listings, as well as the correction of certain errors in listings. For instance, we cleared the year of listings when they were marked as 0. No cars were being manufactured in the year 0.
 
-# Creates new CSV file
-write.csv(filtered_cars, "filtered_cars.csv")
+```{r, echo=FALSE}
+filtered_cars <-
+  craigslist_cars %>% 
+  select(-id, -url, -region_url, -image_url, -description) %>% 
+  mutate_if(is.character, as.factor)
 ```
 
 ```{r, echo=FALSE}
-# Reads filtered_cars.csv
-filtered_cars <- read.csv("filtered_cars.csv")
-
-# Sample
-cars_clean_sample <- sample_n(filtered_cars, 44512)
+barplot(table(filtered_cars$state))
 ```
 
+This graph gives us a visual representation of the distribution of cars across both of our chosen states. As seen here, most of the data comes from WI.
 
-```{r}
-barplot(table(cars_clean_sample$state))
-```
-
-This graph gives us a visual representaion of the distribution of cars across each of the chosen states. As we can see here, a bit over half of the dataset comes from California, Oregon, and Washington.
-
-
-```{r, fig.width=8, fig.height=7}
-cars_clean_sample %>% 
-  select(-url) %>% 
+```{r, fig.width=8, fig.height=8, echo=FALSE}
+filtered_cars %>% 
   select_if(is.numeric) %>% 
   pivot_longer(cols = everything(),
                names_to = "variable", values_to = "value") %>% 
@@ -93,57 +80,159 @@ cars_clean_sample %>%
   facet_wrap(vars(variable), scales = "free")
 ```
 
-These graphs show us there is a good bit of cleaning to be done on the data. We can see that for instance we want to use the select() function to only include useful variables, leaving out for example id. Additionally, it looks that year has an outlier(s) where the year is either 0 or blank, skewing the graph wildly.
+```{r, fig.width=8, fig.height=8, echo=FALSE}
 
-
-```{r, fig.width=8, fig.height=14}
-
-g0 <- cars_clean_sample %>% 
+g1 <- filtered_cars %>% 
   ggplot(aes(x = condition)) +
   geom_bar() +
   coord_flip()
 
-g1 <- cars_clean_sample %>% 
-  ggplot(aes(x = cylinders)) +
-  geom_bar() +
-  coord_flip()
-
-g2 <- cars_clean_sample %>% 
-  ggplot(aes(x = fuel)) +
-  geom_bar() +
-  coord_flip()
-
-g3 <- cars_clean_sample %>% 
-  ggplot(aes(x = title_status)) +
-  geom_bar() +
-  coord_flip()
-
-g4 <- cars_clean_sample %>% 
-  ggplot(aes(x = drive)) +
-  geom_bar() +
-  coord_flip()
-
-g5 <- cars_clean_sample %>% 
+g2 <- filtered_cars %>% 
   ggplot(aes(x = size)) +
   geom_bar() +
   coord_flip()
 
-g6 <- cars_clean_sample %>% 
+g3 <- filtered_cars %>% 
   ggplot(aes(x = type)) +
   geom_bar() +
   coord_flip()
 
-g7 <- cars_clean_sample %>% 
+g4 <- filtered_cars %>% 
   ggplot(aes(x = paint_color)) +
   geom_bar() +
   coord_flip()
 
-g8 <- cars_clean_sample %>% 
-  ggplot(aes(x = transmission)) +
-  geom_bar() +
-  coord_flip()
-
-grid.arrange(g0, g1, g2, g3, g4, g5, g6, g7, g8, nrow = 5)
+grid.arrange(g1, g2, g3, g4, nrow = 2)
 ```
 
-From these graphs we can discern once again that some additional cleaning needs to be done. Furthermore, we can see that for many variables, the most prevalent variable is null. This can be seen with cylinders and condition, but not fuel for instance. We can also see that there are many different models in our dataset.
+From these graphs we can see that a good amount of our data is missing, indicated as "N/A" in the charts above for the variables of condition, size, type, and paint color.
+
+```{r, echo=FALSE}
+set.seed(313)
+
+MN_cars <- filter(filtered_cars, state == "mn")
+WI_cars <- filter(filtered_cars, state == "wi")
+
+MN_cars_split <- initial_split(MN_cars, prop = .7)
+MN_cars_train <- training(MN_cars_split)
+MN_cars_test <- testing(MN_cars_split)
+
+WI_cars_split <- initial_split(WI_cars, prop = .7)
+WI_cars_train <- training(WI_cars_split)
+WI_cars_test <- testing(WI_cars_split)
+```
+
+**The Plan**
+The plan for our research is to create different models using different modeling methods to predict the price of cars found in MN and WI respectively. We will find the best model for each state, and see if, and how the models and/or the variables differ.
+
+**The Modeling**
+We started off with simple, easy to create models to predict the price of cars in each state. While these first models were not as accurate as more complicated models created later, taking into account their ease of creation, which is "better" is subjective.
+
+**OLS Model**
+The first and simplest model we worked with was an ordinary least squares linear model using all of the variables in the dataset. We created one for each of the two sets of state data.
+
+```{r, echo=FALSE}
+model_stats <- function(data, lev = NULL, model = NULL) {
+  
+  stats <- defaultSummary(data, lev = lev, model = model)
+  
+  transf_rmse <- function (pred, obs) {
+    sqrt(mean((exp(obs) - exp(pred))^2))
+  }
+  
+  trmse <- transf_rmse(pred = data$pred,
+                       obs = data$obs)
+  c(tRMSE = trmse, stats)
+}
+```
+
+```{r, echo=FALSE}
+MN_cars_ols <- train(
+  log(price) ~ .,
+  data = MN_cars_train, 
+  method = "lm",
+  trControl = trainControl(method = "cv", 
+                           number = 5, 
+                           summaryFunction = model_stats), 
+  na.action = na.omit
+)
+```
+
+```{r, echo=FALSE}
+WI_cars_ols <- train(
+  log(price) ~ .,
+  data = WI_cars_train, 
+  method = "lm",
+  trControl = trainControl(method = "cv", 
+                           number = 5, 
+                           summaryFunction = model_stats), 
+  na.action = na.omit
+)
+```
+
+**MN tRMSE for OLS**
+```{r, echo=FALSE}
+MN_cars_ols$results %>% 
+  select(tRMSE)
+```
+
+**WI tRMSE for OLS**
+```{r, echo=FALSE}
+WI_cars_ols$results %>% 
+  select(tRMSE)
+```
+
+What we found was that for the the model for the MN dataset, the tRMSE was 16067.51 while for the model for the WI dataset, the tRMSE was 16450.5. tRMSE, put simply, is a measure of the fit of the model, thus a lower number is better. While these numbers are high, they are quite close to one another. This shows us that while the model is not accurate, between the two states there was little variance.
+
+**Decision Tree**
+One of the better and more accurate models (for both states) we worked with was a decision tree model using all of the variables. While they were more accurate than other models, the two models varied more so. This model also quite nicely visually shows this difference.
+
+```{r, echo=FALSE}
+MN_tree <- train(
+  price ~ .,
+  data = MN_cars_train %>% select_if(is.numeric),
+  method = "rpart",
+  trControl = trainControl(method = "cv", 
+                           number = 5),
+  tuneGrid = data.frame(cp = .005),
+  na.action = na.omit
+)
+```
+
+**MN Tree**
+```{r, echo=FALSE}
+rpart.plot(MN_tree$finalModel)
+```
+**MN Tree Results**
+```{r, echo=FALSE}
+MN_tree$results
+```
+
+```{r, echo=FALSE}
+WI_tree <- train(
+  price ~ .,
+  data = WI_cars_train %>% select_if(is.numeric),
+  method = "rpart",
+  trControl = trainControl(method = "cv", 
+                           number = 5),
+  tuneGrid = data.frame(cp = .005),
+  na.action = na.omit
+)
+```
+
+**WI Tree**
+```{r, echo=FALSE}
+rpart.plot(WI_tree$finalModel)
+```
+
+**WI Tree Results**
+```{r, echo=FALSE}
+WI_tree$results
+```
+
+This variance can be seen in the two tree graphs shown above. The first, the tree for MN with a depth of 7 shows the first split of the data based on if a car is from earlier than 2013. For the WI tree with the same depth, this first split is based of of the year of 2011. From their the deviations from each other become greater using different variables at each step in the tree and different places in the same variable to split on.
+
+Compared to the prior models with RMSEs greater than 16000, these models are 5649.273 for MN and 5244.618 for WI. Given this model's combination of simplicity with accuracy in predicting price, we chose it as our "final model".
+
+**Conclusion**
+Our research was not focused around the question of how to predict something the most accurately, but rather the differences that can emerge in seemingly similar models, even when using the same variables and similar data sets. Thus, we would call it a success as we were able to look more closely at this quality, and discuss the ramifications it can have in a model. You should not assume, even if your data is at first seemingly similar, coming from places close to one another or regarding similar items, that your models will be similar. If there is one point of interest to take away from this research, that is it.
